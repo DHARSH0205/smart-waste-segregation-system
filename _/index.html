@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Waste Segregation System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app">
+        <h1>Smart Waste Segregation System</h1>
+
+        <div class="upload-box">
+            <input type="file" id="imageInput" accept="image/*">
+
+            <img id="preview" class="preview" style="display: none;" />
+
+            <button id="predictBtn" disabled>
+                Predict Waste Type
+            </button>
+
+            <h3 id="result" class="result"></h3>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
