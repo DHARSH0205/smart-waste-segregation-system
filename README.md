@@ -29,3 +29,21 @@ The system supports **single image upload, real-time camera capture, and bulk ZI
   - E-Waste
   - Cloth
 - Validation Accuracy: ~94%
+
+## 🛠 Tech Stack
+
+### Frontend
+- React.js
+- Axios
+- CSS
+- Recharts (for visualization - upcoming)
+
+### Backend
+- FastAPI
+- Python
+- TensorFlow / Keras
+- Pillow
+- NumPy
+- Uvicorn
+
+---
