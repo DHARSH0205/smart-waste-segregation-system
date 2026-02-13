@@ -46,4 +46,20 @@ The system supports **single image upload, real-time camera capture, and bulk ZI
 - NumPy
 - Uvicorn
 
----
+# Folder Structure
+waste-segregation-system/
+│
+├── frontend/ 
+│ ├── src/
+│ ├── package.json
+│
+├── backend/ 
+│ ├── main.py
+│ ├── model/
+│ │ ├── waste_classifier.keras
+│ │ ├── class_labels.json
+│ ├── bulk_storage/
+│ ├── .env
+│
+├── .gitignore
+├── README.md
