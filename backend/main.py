@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 import json
 import io
+import download_model
 
 from fastapi.responses import FileResponse
 import tempfile
