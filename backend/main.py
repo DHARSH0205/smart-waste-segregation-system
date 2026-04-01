@@ -1,21 +1,39 @@
-from fastapi import FastAPI, File, UploadFile , HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from PIL import Image
 import numpy as np
 import tensorflow as tf
 import json
 import io
-from model import download_model
-
-from fastapi.responses import FileResponse
 import tempfile
 import zipfile
 import shutil
 import os
 import uuid
+import threading
+from model import download_model
 
-# ---------- FastAPI app ----------
+from pydantic import BaseModel
+
+
+# --------------------- Login model ---------------------
+class LoginData(BaseModel):
+    email: str
+    password: str
+
+
+# --------------------- FastAPI app ---------------------
 app = FastAPI()
+
+
+@app.post("/login")
+def login(data: LoginData):
+    if data.email == "admin@gmail.com" and data.password == "1234":
+        return {"message": "Login successful"}
+
+    return {"message": "Invalid credentials"}
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,33 +43,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Load model & labels ----------
-MODEL_PATH = "model/waste_classifier.keras"
+# --------------------- Model & labels ---------------------
+# Use your compressed TFLite model here
+MODEL_PATH = "model/waste_classifier_dynamic.tflite"
 LABEL_PATH = "model/class_labels.json"
 
-model = tf.keras.models.load_model(MODEL_PATH)
+interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter.allocate_tensors()
+
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+interpreter_lock = threading.Lock()
 
 with open(LABEL_PATH, "r") as f:
     class_labels = json.load(f)
 
-# ---------- Image preprocessing ----------
+# --------------------- Image preprocessing ---------------------
 IMG_SIZE = (224, 224)
+
 
 def preprocess_image(image_bytes):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize(IMG_SIZE)
     image = np.array(image)
     image = tf.keras.applications.resnet50.preprocess_input(image)
-    image = np.expand_dims(image, axis=0)
+    image = np.expand_dims(image, axis=0).astype(np.float32)
     return image
 
-# ---------- Prediction endpoint ----------
+
+def tflite_predict(single_image_batch):
+    """
+    single_image_batch shape: (1, 224, 224, 3)
+    """
+    with interpreter_lock:
+        interpreter.set_tensor(input_details[0]["index"], single_image_batch)
+        interpreter.invoke()
+        predictions = interpreter.get_tensor(output_details[0]["index"])
+    return predictions
+
+
+# --------------------- Prediction endpoint ---------------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     image_bytes = await file.read()
     processed_image = preprocess_image(image_bytes)
 
-    predictions = model.predict(processed_image)
+    predictions = tflite_predict(processed_image)
     confidence = float(np.max(predictions))
     predicted_index = int(np.argmax(predictions))
 
@@ -61,19 +98,18 @@ async def predict(file: UploadFile = File(...)):
         "confidence": round(confidence, 3)
     }
 
-#---------------------zip file upload-------------
 
+# --------------------- ZIP batch classification ---------------------
 MAX_FILES = 500
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 async def process_batch(images_batch, paths_batch, output_dir):
+    for i, img_array in enumerate(images_batch):
+        img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
 
-    batch_array = np.stack(images_batch, axis=0)
-    predictions = model.predict(batch_array)
-
-    for i, prediction in enumerate(predictions):
-        predicted_index = int(np.argmax(prediction))
+        predictions = tflite_predict(img_array)
+        predicted_index = int(np.argmax(predictions[0]))
         label = class_labels[str(predicted_index)]
 
         destination_folder = os.path.join(output_dir, label)
@@ -87,7 +123,6 @@ async def process_batch(images_batch, paths_batch, output_dir):
 
 @app.post("/bulk_predict")
 async def bulk_predict(zipfile_upload: UploadFile = File(...)):
-
     if not zipfile_upload.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Please upload a ZIP file")
 
@@ -130,7 +165,7 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
 
         for img_path in image_paths:
             try:
-                img = Image.open(img_path).convert("RGB").resize((224, 224))
+                img = Image.open(img_path).convert("RGB").resize(IMG_SIZE)
                 img_array = np.array(img)
                 img_array = tf.keras.applications.resnet50.preprocess_input(img_array)
                 images_batch.append(img_array)
@@ -160,7 +195,7 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
             filename="classified_images.zip",
             media_type="application/zip"
         )
-
+    
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))

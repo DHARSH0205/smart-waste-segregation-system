@@ -1,7 +1,8 @@
 import gdown
 import os
 
-MODEL_URL = "https://drive.google.com/uc?id=1DGlXTebXgpvJ-VnloPSIkZJNNoQ1CqP9"
+# MODEL_URL = "https://drive.google.com/uc?id=1DGlXTebXgpvJ-VnloPSIkZJNNoQ1CqP9"
+MODEL_URL = "https://drive.google.com/uc?id=15WvU8x8PlohaNRExDI8tw48VWI74jb8P"
 MODEL_PATH = "model/waste_classifier.keras"
 
 if not os.path.exists(MODEL_PATH):
@@ -10,3 +11,4 @@ if not os.path.exists(MODEL_PATH):
     print("Model downloaded.")
 else:
     print("Model already exists.")
+
