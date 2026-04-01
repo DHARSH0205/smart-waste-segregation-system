@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import "./LandingPage.css";
 
-function LandingPage() {
+function LandingPage({ onOpenChat }) {
   const navigate = useNavigate();
 
   const wasteTypes = [
@@ -49,9 +49,12 @@ function LandingPage() {
         <div className="banner-content">
           <h1>Smart Waste Segregation System</h1>
           <p>AI-powered waste classification for cleaner cities</p>
-          <button onClick={() => navigate("/classify")}>
-            Classify Waste
-          </button>
+          <div className="banner-actions">
+            <button onClick={() => navigate("/classify")}>Classify Waste</button>
+            <button className="secondary-cta" onClick={onOpenChat}>
+              Ask EcoBuddy
+            </button>
+          </div>
         </div>
       </div>
 

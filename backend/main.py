@@ -14,6 +14,7 @@ import uuid
 import threading
 import gdown
 from pydantic import BaseModel
+from chat import generate_chat_reply
 
 # --------------------- Paths / Config ---------------------
 MODEL_PATH = os.getenv("MODEL_PATH", "model/waste_classifier_dynamic.tflite")
@@ -43,6 +44,15 @@ class LoginData(BaseModel):
     password: str
 
 
+class ChatRequest(BaseModel):
+    message: str
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    model: str
+
+
 @app.post("/login")
 def login(data: LoginData):
     if data.email == "admin@gmail.com" and data.password == "1234":
@@ -53,6 +63,16 @@ def login(data: LoginData):
 @app.get("/")
 def home():
     return {"message": "Backend is running"}
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    try:
+        return generate_chat_reply(request.message)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Chat generation failed: {exc}") from exc
 
 
 # --------------------- Model globals ---------------------
