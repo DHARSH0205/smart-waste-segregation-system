@@ -12,10 +12,30 @@ import shutil
 import os
 import uuid
 import threading
-from model import download_model
-
+import gdown
 from pydantic import BaseModel
 
+# --------------------- Paths / Config ---------------------
+MODEL_PATH = os.getenv("MODEL_PATH", "model/waste_classifier_dynamic.tflite")
+LABEL_PATH = os.getenv("LABEL_PATH", "model/class_labels.json")
+MODEL_URL = os.getenv("MODEL_URL", "").strip()  # optional direct download URL
+
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+
+# --------------------- FastAPI app ---------------------
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --------------------- Login model ---------------------
 class LoginData(BaseModel):
@@ -23,43 +43,91 @@ class LoginData(BaseModel):
     password: str
 
 
-# --------------------- FastAPI app ---------------------
-app = FastAPI()
-
-
 @app.post("/login")
 def login(data: LoginData):
     if data.email == "admin@gmail.com" and data.password == "1234":
         return {"message": "Login successful"}
-
     return {"message": "Invalid credentials"}
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.get("/")
+def home():
+    return {"message": "Backend is running"}
 
-# --------------------- Model & labels ---------------------
-# Use your compressed TFLite model here
-MODEL_PATH = "model/waste_classifier_dynamic.tflite"
-LABEL_PATH = "model/class_labels.json"
 
-interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
-interpreter.allocate_tensors()
+# --------------------- Model globals ---------------------
+interpreter = None
+input_details = None
+output_details = None
+class_labels = None
 
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+model_load_lock = threading.Lock()
 interpreter_lock = threading.Lock()
-
-with open(LABEL_PATH, "r") as f:
-    class_labels = json.load(f)
 
 # --------------------- Image preprocessing ---------------------
 IMG_SIZE = (224, 224)
+
+
+def download_model_if_needed():
+    """
+    Downloads the model only if it does not exist.
+    Requires MODEL_URL to be set if you want auto-download.
+    """
+    if os.path.exists(MODEL_PATH):
+        return
+
+    if not MODEL_URL:
+        raise RuntimeError(
+            f"Model file not found at '{MODEL_PATH}' and MODEL_URL is empty."
+        )
+
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    print("Downloading model...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+    print("Model downloaded successfully.")
+
+
+def ensure_model_loaded():
+    """
+    Lazy-loads the TFLite model and labels on the first request.
+    Safe for Render: the app starts even if the model is not loaded yet.
+    """
+    global interpreter, input_details, output_details, class_labels
+
+    if interpreter is not None and input_details is not None and output_details is not None and class_labels is not None:
+        return
+
+    with model_load_lock:
+        if interpreter is not None and input_details is not None and output_details is not None and class_labels is not None:
+            return
+
+        try:
+            if not os.path.exists(MODEL_PATH):
+                download_model_if_needed()
+
+            if not os.path.exists(LABEL_PATH):
+                raise FileNotFoundError(f"Label file not found at '{LABEL_PATH}'")
+
+            print("Loading TFLite model...")
+            local_interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+            local_interpreter.allocate_tensors()
+
+            local_input_details = local_interpreter.get_input_details()
+            local_output_details = local_interpreter.get_output_details()
+
+            with open(LABEL_PATH, "r") as f:
+                local_class_labels = json.load(f)
+
+            interpreter = local_interpreter
+            input_details = local_input_details
+            output_details = local_output_details
+            class_labels = local_class_labels
+
+            print("Model loaded successfully.")
+
+        except Exception as e:
+            print("Model loading failed:", e)
+            raise HTTPException(status_code=500, detail=f"Model loading failed: {e}")
 
 
 def preprocess_image(image_bytes):
@@ -75,16 +143,21 @@ def tflite_predict(single_image_batch):
     """
     single_image_batch shape: (1, 224, 224, 3)
     """
+    ensure_model_loaded()
+
     with interpreter_lock:
         interpreter.set_tensor(input_details[0]["index"], single_image_batch)
         interpreter.invoke()
         predictions = interpreter.get_tensor(output_details[0]["index"])
+
     return predictions
 
 
 # --------------------- Prediction endpoint ---------------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+    ensure_model_loaded()
+
     image_bytes = await file.read()
     processed_image = preprocess_image(image_bytes)
 
@@ -123,11 +196,12 @@ async def process_batch(images_batch, paths_batch, output_dir):
 
 @app.post("/bulk_predict")
 async def bulk_predict(zipfile_upload: UploadFile = File(...)):
+    ensure_model_loaded()
+
     if not zipfile_upload.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Please upload a ZIP file")
 
     with tempfile.TemporaryDirectory() as temp_input, tempfile.TemporaryDirectory() as temp_output:
-
         # Save uploaded zip
         zip_path = os.path.join(temp_input, "input.zip")
         with open(zip_path, "wb") as f:
@@ -137,7 +211,7 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(temp_input)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid ZIP file")
 
         # Collect image paths
@@ -176,7 +250,7 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
                     images_batch = []
                     paths_batch = []
 
-            except:
+            except Exception:
                 continue
 
         # Process remaining
@@ -195,7 +269,8 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
             filename="classified_images.zip",
             media_type="application/zip"
         )
-    
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
