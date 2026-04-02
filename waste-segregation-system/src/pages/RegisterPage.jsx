@@ -25,8 +25,7 @@ function RegisterPage() {
       );
       navigate("/login");
     } catch (err) {
-      const detail = err?.response?.data?.detail || "Registration failed. Please try again.";
-      setErrorMsg(detail);
+      setErrorMsg(err?.response?.data?.detail || "Registration failed.");
     } finally {
       setLoading(false);
     }
@@ -35,17 +34,9 @@ function RegisterPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="page-topbar">
-          <button className="mode-back-btn" type="button" onClick={() => navigate("/")}>
-            Back
-          </button>
-          <button className="ghost-cta" type="button" onClick={() => navigate("/profile")}>
-            Profile
-          </button>
-        </div>
 
-        <h1>Create account</h1>
-        <p>Save your scan history and chat memory (temporary) with EcoBuddy.</p>
+        <h1>Get Started</h1>
+        <p>Join EcoBuddy to track your scans and improve city sustainability.</p>
 
         <form className="auth-form" onSubmit={onSubmit}>
           <div className="auth-field">
@@ -55,18 +46,18 @@ function RegisterPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              autoComplete="username"
+              placeholder="Choose a nickname"
             />
           </div>
 
           <div className="auth-field">
-            <label>Email</label>
+            <label>Email Address</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoComplete="email"
+              placeholder="name@example.com"
             />
           </div>
 
@@ -77,21 +68,21 @@ function RegisterPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="new-password"
+              placeholder="Create a strong password"
             />
           </div>
 
           <button className="auth-submit-btn" type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Register"}
+            {loading ? "Creating Account..." : "Create Account"}
           </button>
         </form>
 
         {errorMsg && <div className="auth-error">{errorMsg}</div>}
 
         <div className="auth-links">
-          <span>Already have an account?</span>
-          <button className="auth-link" type="button" onClick={() => navigate("/login")}>
-            Login
+          <span>Already part of the system?</span>
+          <button className="auth-link" onClick={() => navigate("/login")}>
+            Login to your account
           </button>
         </div>
       </div>

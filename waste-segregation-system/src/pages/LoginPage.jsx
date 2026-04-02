@@ -34,14 +34,6 @@ function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="page-topbar">
-          <button className="mode-back-btn" type="button" onClick={() => navigate("/")}>
-            Back
-          </button>
-          <button className="ghost-cta" type="button" onClick={() => navigate("/profile")}>
-            Profile
-          </button>
-        </div>
 
         <h1>Login</h1>
         <p>Welcome back. Let EcoBuddy help you dispose the right way.</p>
