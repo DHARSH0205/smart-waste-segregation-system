@@ -27,6 +27,15 @@ function ClassifyPage() {
   return (
     <div className="classify-page">
       <section className="classify-hub">
+        <div className="page-topbar">
+          <button className="mode-back-btn" type="button" onClick={() => navigate("/")}>
+            Back
+          </button>
+          <button className="ghost-cta" type="button" onClick={() => navigate("/profile")}>
+            Profile
+          </button>
+        </div>
+
         <h1>Choose Classification Mode</h1>
         <p>Pick one workflow to continue with waste classification.</p>
 

@@ -46,6 +46,24 @@ function LandingPage({ onOpenChat }) {
     <>
       {/* Banner */}
       <div className="banner">
+        {/* Top Navigation Area */}
+            <div className="banner-nav">
+              <button 
+                className="ghost-cta" 
+                onClick={() => navigate("/about")} 
+                type="button"
+              >
+                About Project
+              </button>
+              <button 
+                className="ghost-cta" 
+                onClick={() => navigate("/profile")} 
+                type="button"
+              >
+                Profile
+              </button>
+        </div>
+
         <div className="banner-content">
           <h1>Smart Waste Segregation System</h1>
           <p>AI-powered waste classification for cleaner cities</p>

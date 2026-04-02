@@ -159,6 +159,15 @@ function WasteDetailPage() {
 
     return (
         <div className="waste-detail">
+            <div className="page-topbar">
+                <button className="mode-back-btn" type="button" onClick={() => navigate("/")}>
+                    Back
+                </button>
+                <button className="ghost-cta" type="button" onClick={() => navigate("/profile")}>
+                    Profile
+                </button>
+            </div>
+
             <h1 className="waste-title">{waste.title}</h1>
 
             <div
@@ -201,9 +210,6 @@ function WasteDetailPage() {
                 </ul>
             </div>
 
-            <button className="back-btn" onClick={() => navigate("/")}>
-                ← Back to Home
-            </button>
         </div>
     );
 

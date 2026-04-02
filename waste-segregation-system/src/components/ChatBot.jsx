@@ -35,6 +35,14 @@ function ChatBot({ isOpen, onClose }) {
         text: "Chat cleared. Ask me about recycling, composting, or hazardous waste handling.",
       },
     ]);
+
+    // If the user is authenticated, also clear server-side temporary memory.
+    // Fail silently if not logged in.
+    fetch(`${API_BASE_URL}/chat/clear`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => {});
   };
 
   const sendMessage = async (event) => {
@@ -55,6 +63,7 @@ function ChatBot({ isOpen, onClose }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ message }),
+        credentials: "include",
       });
 
       const data = await response.json();
@@ -76,13 +85,16 @@ function ChatBot({ isOpen, onClose }) {
     }
   };
 
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div className="chatbot-overlay" onClick={onClose}>
-      <section className="chatbot-modal" onClick={(event) => event.stopPropagation()}>
+    <div
+      className={`chatbot-overlay ${isOpen ? "is-open" : ""}`}
+      onClick={onClose}
+      aria-hidden={!isOpen}
+    >
+      <section
+        className="chatbot-modal"
+        onClick={(event) => event.stopPropagation()}
+      >
         <header className="chatbot-header">
           <div>
             <h3>EcoBuddy Chat</h3>

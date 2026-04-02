@@ -1,0 +1,209 @@
+:root {
+    --bg-color: #f8fafc;
+    --card-bg: #ffffff;
+    --primary-green: #10b981;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .about-container {
+    min-height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    padding-bottom: 4rem;
+  }
+  
+  /* Header Fix */
+  .about-header {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid var(--border-color);
+  }
+  
+  .header-title {
+    margin-left: 2rem;
+    font-size: 1.2rem;
+    color: var(--text-muted);
+  }
+  
+  .back-btn {
+    background: transparent;
+    color: var(--primary-green);
+    border: 2px solid var(--primary-green);
+    padding: 0.5rem 1.2rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.2s ease;
+  }
+  
+  .back-btn:hover {
+    background: var(--primary-green);
+    color: white;
+  }
+  
+  /* Main Content */
+  .about-content {
+    max-width: 900px;
+    margin: 3rem auto;
+    padding: 0 1rem;
+  }
+  
+  .hero-card {
+    text-align: center;
+    background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+    padding: 3rem 2rem;
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    margin-bottom: 2rem;
+  }
+  
+  .hero-card h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: #064e3b;
+  }
+  
+  .tech-tags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.8rem;
+    margin-top: 1.5rem;
+  }
+  
+  .tech-tags span {
+    background: white;
+    color: var(--primary-green);
+    border: 1px solid var(--primary-green);
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  
+  /* Grid Layout */
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .tech-details-card, .author-card, .contact-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+  }
+  
+  .tech-item {
+    margin-bottom: 1.2rem;
+  }
+  
+  .tech-item strong {
+    display: block;
+    color: var(--primary-green);
+    margin-bottom: 0.3rem;
+  }
+  
+  .tech-item p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+  
+  /* Author Card */
+  .author-card {
+    text-align: center;
+  }
+  
+  .author-avatar {
+    width: 80px;
+    height: 80px;
+    background: var(--primary-green);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 0 auto 1rem;
+  }
+  
+  .author-name {
+    font-weight: 800;
+    font-size: 1.2rem;
+  }
+  
+  .author-bio {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    line-height: 1.5;
+  }
+  
+  /* Contact Form */
+  .contact-section h3 {
+    margin-bottom: 1.5rem;
+    text-align: center;
+  }
+  
+  .contact-form {
+    display: grid;
+    gap: 1.2rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+  
+  .form-group input, .form-group textarea {
+    width: 100%;
+    padding: 0.8rem;
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 1rem;
+  }
+  
+  .form-group input:focus, .form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-green);
+  }
+  
+  .submit-btn {
+    background: var(--primary-green);
+    color: white;
+    border: none;
+    padding: 1rem;
+    border-radius: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  
+  .form-success-msg {
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .form-success-msg h4 { color: var(--primary-green); }
+  
+  @media (max-width: 768px) {
+    .about-grid {
+      grid-template-columns: 1fr;
+    }
+  }

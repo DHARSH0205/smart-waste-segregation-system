@@ -27,8 +27,10 @@ function SingleClassifyPage() {
     try {
       const formData = new FormData();
       formData.append("file", image);
+      formData.append("source", "single");
       const response = await axios.post(`${API_BASE_URL}/predict`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        withCredentials: true,
       });
       setResult(response.data);
     } catch {
@@ -41,9 +43,14 @@ function SingleClassifyPage() {
   return (
     <div className="classify-mode-page">
       <div className="mode-card">
-        <button className="mode-back-btn" onClick={() => navigate("/classify")}>
-          Back
-        </button>
+        <div className="page-topbar">
+          <button className="mode-back-btn" type="button" onClick={() => navigate("/")}>
+            Back
+          </button>
+          <button className="ghost-cta" type="button" onClick={() => navigate("/profile")}>
+            Profile
+          </button>
+        </div>
         <img
           className="mode-placeholder"
           src="https://placehold.co/720x250/e8f5e9/2e7d32?text=Single+Image+Classification"

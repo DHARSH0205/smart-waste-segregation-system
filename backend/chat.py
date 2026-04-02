@@ -20,6 +20,7 @@ BEHAVIOR RULES:
 - If the disposal method for an item is dangerous (like E-waste), emphasize taking it to a certified collection center.
 - Keep responses under 3 sentences unless the user asks for a DIY recipe.
 - Stay positive and encouraging about environmental impact.
+- Don't use any bold words or emojis in your responses.
 """
 
 
@@ -30,18 +31,47 @@ def _get_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def generate_chat_reply(message: str) -> dict:
+def generate_chat_reply(message: str, history: list[dict] | None = None) -> dict:
+    """
+    history: list of {role: "user"|"bot", content: "..."} in chronological order.
+    """
     prompt = (message or "").strip()
     if not prompt:
         raise ValueError("Message cannot be empty")
 
+    history = history or []
+
+    contents: list = []
+    for item in history:
+        role = item.get("role")
+        content_text = (item.get("content") or "").strip()
+        if not content_text:
+            continue
+
+        # Gemini uses "user" and "model" roles.
+        gemini_role = "user" if role == "user" else "model"
+        contents.append(
+            types.Content(
+                role=gemini_role,
+                parts=[types.Part.from_text(text=content_text)],
+            )
+        )
+
+    # Current user message
+    contents.append(
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=prompt)],
+        )
+    )
+
     client = _get_client()
     response = client.models.generate_content(
         model=MODEL_NAME,
-        contents=prompt,
+        contents=contents,
         config=types.GenerateContentConfig(
             thinking_config=types.ThinkingConfig(thinking_budget=0),
-            system_instruction=SYSTEM_INSTRUCTION,
+            system_instruction=[types.Part.from_text(text=SYSTEM_INSTRUCTION)],
         ),
     )
 

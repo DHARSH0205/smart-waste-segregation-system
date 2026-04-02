@@ -23,6 +23,7 @@ function BulkClassifyPage() {
       const response = await axios.post(`${API_BASE_URL}/bulk_predict`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         responseType: "blob",
+        withCredentials: true,
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
@@ -41,9 +42,14 @@ function BulkClassifyPage() {
   return (
     <div className="classify-mode-page">
       <div className="mode-card">
-        <button className="mode-back-btn" onClick={() => navigate("/classify")}>
-          Back
-        </button>
+        <div className="page-topbar">
+          <button className="mode-back-btn" type="button" onClick={() => navigate("/")}>
+            Back
+          </button>
+          <button className="ghost-cta" type="button" onClick={() => navigate("/profile")}>
+            Profile
+          </button>
+        </div>
         <img
           className="mode-placeholder"
           src="https://placehold.co/720x250/f1f8e9/558b2f?text=Bulk+ZIP+Classification"

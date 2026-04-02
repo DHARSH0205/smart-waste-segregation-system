@@ -1,6 +1,7 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Response, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from typing import Optional
 from PIL import Image
 import numpy as np
 import tensorflow as tf
@@ -15,6 +16,26 @@ import threading
 import gdown
 from pydantic import BaseModel
 from chat import generate_chat_reply
+from db import (
+    init_db,
+    create_user,
+    get_user_by_email,
+    verify_user_password,
+    create_session,
+    get_user_id_from_session,
+    destroy_session,
+    get_profile_stats,
+    get_recent_scans,
+    record_scan,
+    record_scans_many,
+    chat_get_or_create_session,
+    chat_touch_session,
+    chat_get_recent_messages,
+    chat_add_message,
+    chat_clear_session,
+    SCAN_HISTORY_LIMIT_PER_PROFILE,
+    update_password_for_user,
+)
 
 # --------------------- Paths / Config ---------------------
 MODEL_PATH = os.getenv("MODEL_PATH", "model/waste_classifier_dynamic.tflite")
@@ -23,7 +44,7 @@ MODEL_URL = os.getenv("MODEL_URL", "").strip()  # optional direct download URL
 
 CORS_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5174").split(",")
     if origin.strip()
 ]
 
@@ -53,11 +74,125 @@ class ChatResponse(BaseModel):
     model: str
 
 
+class RegisterData(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class PasswordResetData(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
+SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "session_id")
+SESSION_COOKIE_MAX_AGE_DAYS = int(os.getenv("SESSION_COOKIE_MAX_AGE_DAYS", "7"))
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "none").lower()
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "true").lower() in ("1", "true", "yes")
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+    # Ensure an admin user exists for backwards compatibility.
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@gmail.com")
+    admin_password = os.getenv("ADMIN_PASSWORD", "1234")
+    admin_username = os.getenv("ADMIN_USERNAME", "admin")
+
+    try:
+        existing = get_user_by_email(admin_email)
+        if not existing:
+            create_user(admin_username, admin_email, admin_password)
+    except Exception:
+        # Don't prevent server boot if admin bootstrap fails.
+        pass
+
+
+@app.post("/register")
+def register(data: RegisterData, response: Response):
+    try:
+        user_id = create_user(data.username, data.email, data.password)
+        session_id = create_session(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        # Likely unique constraint failure on email.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        httponly=True,
+        samesite=SESSION_COOKIE_SAMESITE,
+        secure=SESSION_COOKIE_SECURE,
+        max_age=SESSION_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+    )
+    return {"message": "Registration successful"}
+
+
 @app.post("/login")
-def login(data: LoginData):
-    if data.email == "admin@gmail.com" and data.password == "1234":
-        return {"message": "Login successful"}
-    return {"message": "Invalid credentials"}
+def login(data: LoginData, response: Response):
+    user_row = get_user_by_email(data.email)
+    if not verify_user_password(user_row, data.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    session_id = create_session(int(user_row["id"]))
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        httponly=True,
+        samesite=SESSION_COOKIE_SAMESITE,
+        secure=SESSION_COOKIE_SECURE,
+        max_age=SESSION_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+    )
+    return {"message": "Login successful"}
+
+
+@app.post("/logout")
+def logout(request: Request, response: Response):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id = get_user_id_from_session(session_id)
+    destroy_session(session_id)
+    if user_id:
+        chat_clear_session(user_id)
+    response.delete_cookie(key=SESSION_COOKIE_NAME)
+    return {"message": "Logged out"}
+
+
+@app.post("/password-reset")
+def password_reset(data: PasswordResetData, request: Request):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id = get_user_id_from_session(session_id)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        update_password_for_user(user_id, data.currentPassword, data.newPassword)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"message": "Password updated successfully"}
+
+
+@app.get("/profile")
+def profile(request: Request):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id = get_user_id_from_session(session_id)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    stats = get_profile_stats(user_id)
+    if not stats:
+        raise HTTPException(status_code=404, detail="User not found")
+    return stats
+
+
+@app.get("/scan-history")
+def scan_history(request: Request):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id = get_user_id_from_session(session_id)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"items": get_recent_scans(user_id, limit=SCAN_HISTORY_LIMIT_PER_PROFILE)}
 
 
 @app.get("/")
@@ -66,13 +201,39 @@ def home():
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(chat_request: ChatRequest, request: Request):
     try:
-        return generate_chat_reply(request.message)
+        user_id = get_user_id_from_session(request.cookies.get(SESSION_COOKIE_NAME))
+
+        if not user_id:
+            # Anonymous chat: no persistence.
+            return generate_chat_reply(chat_request.message, history=None)
+
+        session_id = chat_get_or_create_session(user_id)
+        history = chat_get_recent_messages(session_id, limit=20)
+
+        # Store user message then generate reply.
+        chat_add_message(session_id, "user", chat_request.message)
+        reply_payload = generate_chat_reply(chat_request.message, history=history)
+        reply_text = reply_payload["reply"]
+
+        chat_add_message(session_id, "bot", reply_text)
+        chat_touch_session(session_id)
+        return reply_payload
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Chat generation failed: {exc}") from exc
+
+
+@app.post("/chat/clear")
+def chat_clear(request: Request):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id = get_user_id_from_session(session_id)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    chat_clear_session(user_id)
+    return {"message": "Chat cleared"}
 
 
 # --------------------- Model globals ---------------------
@@ -123,7 +284,8 @@ def ensure_model_loaded():
 
         try:
             if not os.path.exists(MODEL_PATH):
-                download_model_if_needed()
+                # download_model_if_needed()
+                pass
 
             if not os.path.exists(LABEL_PATH):
                 raise FileNotFoundError(f"Label file not found at '{LABEL_PATH}'")
@@ -175,7 +337,11 @@ def tflite_predict(single_image_batch):
 
 # --------------------- Prediction endpoint ---------------------
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(
+    request: Request,
+    source: str = Form("single"),
+    file: UploadFile = File(...),
+):
     ensure_model_loaded()
 
     image_bytes = await file.read()
@@ -184,9 +350,29 @@ async def predict(file: UploadFile = File(...)):
     predictions = tflite_predict(processed_image)
     confidence = float(np.max(predictions))
     predicted_index = int(np.argmax(predictions))
+    predicted_category = class_labels[str(predicted_index)]
+
+    user_id = get_user_id_from_session(request.cookies.get(SESSION_COOKIE_NAME))
+    if user_id:
+        source_norm = (source or "").strip()
+        source_norm_lower = source_norm.lower()
+        if source_norm_lower in ("camera", "single"):
+            source_label = source_norm_lower
+        elif source_norm_lower in ("zip", "zipfile", "zip_file", "bulk", "bulkzip"):
+            source_label = "zipFile"
+        else:
+            # Backwards compatible default
+            source_label = "single"
+        record_scan(
+            user_id,
+            predicted_category,
+            predicted_index,
+            confidence,
+            source=source_label,
+        )
 
     return {
-        "category": class_labels[str(predicted_index)],
+        "category": predicted_category,
         "wasteId": predicted_index,
         "confidence": round(confidence, 3)
     }
@@ -197,11 +383,13 @@ MAX_FILES = 500
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
-async def process_batch(images_batch, paths_batch, output_dir):
+async def process_batch(images_batch, paths_batch, output_dir, user_id: Optional[int]):
+    scans_to_insert = []  # Reduce db writes: one batch insert per batch-size chunk.
     for i, img_array in enumerate(images_batch):
         img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
 
         predictions = tflite_predict(img_array)
+        predicted_confidence = float(np.max(predictions[0]))
         predicted_index = int(np.argmax(predictions[0]))
         label = class_labels[str(predicted_index)]
 
@@ -213,10 +401,19 @@ async def process_batch(images_batch, paths_batch, output_dir):
 
         shutil.copy2(paths_batch[i], os.path.join(destination_folder, unique_name))
 
+        if user_id:
+            scans_to_insert.append(
+                (user_id, label, predicted_index, predicted_confidence, "zipFile")
+            )
+
+    if user_id and scans_to_insert:
+        record_scans_many(scans_to_insert)
+
 
 @app.post("/bulk_predict")
-async def bulk_predict(zipfile_upload: UploadFile = File(...)):
+async def bulk_predict(request: Request, zipfile_upload: UploadFile = File(...)):
     ensure_model_loaded()
+    user_id = get_user_id_from_session(request.cookies.get(SESSION_COOKIE_NAME))
 
     if not zipfile_upload.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Please upload a ZIP file")
@@ -266,7 +463,7 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
                 paths_batch.append(img_path)
 
                 if len(images_batch) == batch_size:
-                    await process_batch(images_batch, paths_batch, temp_output)
+                    await process_batch(images_batch, paths_batch, temp_output, user_id)
                     images_batch = []
                     paths_batch = []
 
@@ -275,7 +472,7 @@ async def bulk_predict(zipfile_upload: UploadFile = File(...)):
 
         # Process remaining
         if images_batch:
-            await process_batch(images_batch, paths_batch, temp_output)
+            await process_batch(images_batch, paths_batch, temp_output, user_id)
 
         # Create zip file that persists
         temp_zip_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
